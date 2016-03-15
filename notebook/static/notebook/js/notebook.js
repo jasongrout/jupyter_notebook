@@ -153,6 +153,8 @@ define(function (require) {
         this.dirty = null;
         this.trusted = null;
         this._fully_loaded = false;
+        
+        this.pending_execution = [];
 
         // Trigger cell toolbar registration.
         default_celltoolbar.register(this);
@@ -2090,6 +2092,7 @@ define(function (require) {
                 cell.set_kernel(this.session.kernel);
             }
         }
+        this.execute_pending_cells();
     };
 
     /**
@@ -2221,6 +2224,36 @@ define(function (require) {
     };
 
     /**
+     * Execute a single cell
+     * 
+     * @param cell - the cell to execute
+     * 
+     * If the cell can not be executed, it is added to a list of 
+     * cells pending execution.
+     */
+    Notebook.prototype.execute = function (cell) {
+        var executed = cell.execute();
+        if (!executed) {
+            this.pending_execution.push(cell)
+        }
+    }
+    
+    /**
+     * Execute pending cells
+     * 
+     */
+    Notebook.prototype.execute_pending_cells = function () {
+        var cell;
+        while (cell = this.pending_execution.shift()) {
+            var executed = cell.execute();
+            if (!executed) {
+                console.error("Error trying to execute pending cells");
+                break;
+            }
+        }        
+    }
+
+    /**
      * Execute cells corresponding to the given indices.
      *
      * @param {list} indices - indices of the cells to execute
@@ -2233,7 +2266,7 @@ define(function (require) {
         var cell;
         for (var i = 0; i < indices.length; i++) {
             cell = this.get_cell(indices[i]);
-            cell.execute();
+            this.execute(cell);
         }
 
         this.select(indices[indices.length - 1]);
@@ -2272,7 +2305,7 @@ define(function (require) {
         } else {
             var cell = this.get_selected_cell();
             cell_index = this.find_cell_index(cell);
-            cell.execute();
+            this.execute(cell);
         }
 
         // If we are at the end always insert a new cell and return
@@ -2305,7 +2338,7 @@ define(function (require) {
         } else {
             var cell = this.get_selected_cell();
             cell_index = this.find_cell_index(cell);
-            cell.execute();
+            this.execute(cell);
         }
 
         // If we are at the end always insert a new cell and return
