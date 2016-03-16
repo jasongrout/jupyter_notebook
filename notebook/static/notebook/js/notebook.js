@@ -2234,7 +2234,17 @@ define(function (require) {
     Notebook.prototype.execute = function (cell) {
         var executed = cell.execute();
         if (!executed) {
-            this.pending_execution.push(cell)
+            var pending = this.pending_execution;
+            var index = pending.indexOf(cell);
+            if (index >= 0 ) {
+                // if the cell is already pending, move it to the end
+                for (var i = index; i < pending.length - 1; i++) {
+                    pending[i] = pending[i+1];
+                }
+                pending[pending.length - 1] = cell;
+            } else {
+                pending.push(cell);
+            }
         }
     }
     
