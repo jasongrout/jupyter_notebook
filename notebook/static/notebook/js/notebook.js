@@ -36,6 +36,26 @@ define(function (require) {
         return cell.element.hasClass(_SOFT_SELECTION_CLASS);
     }
 
+    var HoldingKernel = function() {
+        this.counter = -1;
+    }
+    
+    HoldingKernel.prototype.is_connected = function() {
+        return true;
+    }
+    
+    HoldingKernel.prototype.execute = function(text, callbacks, options) {
+        // store the text at this point, since that is what needs to be executed
+        this.counter += 1;
+        this.execution_queue[this.counter] = {text: text, 
+          callbacks: callbacks,
+          options: options}
+        console.log('wanting to execute', text);
+        return this.counter;
+    }
+
+
+
     /**
      * Contains and manages cells.
      * @class Notebook
@@ -2082,12 +2102,32 @@ define(function (require) {
      */
     Notebook.prototype._session_started = function (){
         this._session_starting = false;
+        var oldkernel = this.kernel;
         this.kernel = this.session.kernel;
         var ncells = this.ncells();
         for (var i=0; i<ncells; i++) {
             var cell = this.get_cell(i);
             if (cell instanceof codecell.CodeCell) {
                 cell.set_kernel(this.session.kernel);
+            }
+        }
+        
+        // if we had a holding kernel, then execute the cells in order
+        // with the current kernel
+        if (oldkernel instanceof HoldingKernel) {
+            var i = 0;
+            while (cell = this.get_msg_cell(i)) {
+                var execution_args = oldkernel.execution_queue[i];
+                var oldtext = cell.get_text();
+                var newtext = execution_args.text;
+                if (oldtext !== newtext) {
+                    cell.set_text(oldtext);
+                }
+                cell.execute();
+                if (oldtext !== newtext) {
+                    cell.set_text(newtext);
+                }
+                i += 1;
             }
         }
     };
@@ -2830,6 +2870,16 @@ define(function (require) {
         var failed, msg;
         try {
             this.fromJSON(data);
+            
+            // Initially, set each cell to have a holding kernel that will
+            // record when a cell is being evaluated.
+            var kernel = new HoldingKernel();
+            this.kernel = kernel;
+            this.get_cells().map(function (cell, i) {
+                if (cell instanceof codecell.CodeCell) {
+                    cell.set_kernel(kernel);
+                }
+            });
         } catch (e) {
             failed = e;
             console.log("Notebook failed to load from JSON:", e);
